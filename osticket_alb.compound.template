@@ -1,0 +1,285 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This template creates an instance of osticket for ticket management, fronted by an Application Load Balancer.",
+  "Parameters": {
+    "VPC": {
+      "Description": "VPC ID",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "ALBSslCertificateName": {
+      "Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ELB. The cert must already exist in the service.",
+      "Type": "String"
+    },
+    "ALBSslCertificateService": {
+      "Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
+      "Type": "String",
+      "Default": "ACM",
+      "AllowedValues": [
+        "ACM",
+        "IAM"
+      ]
+    },
+    "PublicSubnetIDs": {
+      "Description": "A list of Public subnet IDs to attach to the load balancer.",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "KeyPairName": {
+      "Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "AmiId": {
+      "Description": "AMI ID",
+      "Type": "String",
+      "Default": ""
+    },
+    "DesiredCapacity": {
+      "Description": "The number of osticket instances the autoscale group will spin up initially",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "MinCapacity": {
+      "Description": "The minimum number of osticket instances for the autoscale group",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "MaxCapacity": {
+      "Description": "The maximum number of osticket instances for the autoscale group",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "IAMGroup": {
+      "Description": "ID of the IAM group to be granted SSH access to osticket instances",
+      "Type": "String"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type for the osticket Instances",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "m4.large",
+        "m4.xlarge"
+      ]
+    },
+    "PrivateSubnetIDs": {
+      "Description": "List of Private Subnet IDs where the osticket instances will run. (only select one, load balancing not tested)",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "osticketConfigBucketName": {
+      "Description": "Name of the existing S3 bucket where the osticket config should be pulled and pushed",
+      "Type": "String"
+    },
+    "LdapServer": {
+      "Description": "Name of LDAP server from which to import osTicket users",
+      "Type": "String",
+      "Default": "ad.example.com",
+      "MinLength": "1"
+    },
+    "SvcAccountDN": {
+      "Description": "Distinguished Name (DN) of the osTicket Service Account to query LDAP directory",
+      "Type": "String",
+      "Default": "CN=svc_account,CN=Users,DC=ad,DC=example,DC=com",
+      "MinLength": "1"
+    },
+    "SvcAccountPassword": {
+      "Description": "Password of the osTicket Service Account to query LDAP directory. Must be at least 8 characters containing letters, numbers and symbols",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "32",
+      "AllowedPattern": "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+      "NoEcho": "true",
+      "Default": "Password123"
+    },
+    "UsersOUDN": {
+      "Description": "Distinguished Name (DN) of the path from which to import LDAP users",
+      "Type": "String",
+      "Default": "CN=Users,DC=ad,DC=example,DC=com",
+      "MinLength": "1"
+    }
+  },
+  "Resources": {
+    "osticketSecurityGroupStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_security_group.element.template",
+        "Parameters": {
+          "VPC": {
+            "Ref": "VPC"
+          },
+          "UseELB": "true"
+        }
+      }
+    },
+    "osticketALBTargetGroupStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_alb_targetgroup.element.template",
+        "Parameters": {
+          "VPC": {
+            "Ref": "VPC"
+          }
+        }
+      }
+    },
+    "osticketALBStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "DependsOn": [
+        "osticketSecurityGroupStack",
+        "osticketALBTargetGroupStack"
+      ],
+      "Properties": {
+        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_alb_public_ssl_443.element.template",
+        "Parameters": {
+          "SslCertificateName": {
+            "Ref": "ALBSslCertificateName"
+          },
+          "SslCertificateService": {
+            "Ref": "ALBSslCertificateService"
+          },
+          "PublicSubnetIDs": {
+            "Fn::Join": [
+              ",",
+              {
+                "Ref": "PublicSubnetIDs"
+              }
+            ]
+          },
+          "SecurityGroupId": {
+            "Fn::GetAtt": [
+              "osticketSecurityGroupStack",
+              "Outputs.osticketElbSecurityGroupId"
+            ]
+          },
+          "TargetGroupId": {
+            "Fn::GetAtt": [
+              "osticketALBTargetGroupStack",
+              "Outputs.TargetGroupName"
+            ]
+          }
+        }
+      }
+    },
+    "osticketAutoScaleStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "DependsOn": [
+        "osticketSecurityGroupStack",
+        "osticketALBTargetGroupStack"
+      ],
+      "Properties": {
+        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_private_autoscale_alb.element.template",
+        "Parameters": {
+          "KeyPairName": {
+            "Ref": "KeyPairName"
+          },
+          "AmiId": {
+            "Ref": "AmiId"
+          },
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "MinCapacity": {
+            "Ref": "MinCapacity"
+          },
+          "MaxCapacity": {
+            "Ref": "MaxCapacity"
+          },
+          "DesiredCapacity": {
+            "Ref": "DesiredCapacity"
+          },
+          "IAMGroup": {
+            "Ref": "IAMGroup"
+          },
+          "osticketConfigBucketName": {
+            "Ref": "osticketConfigBucketName"
+          },
+          "LdapServer": {
+            "Ref": "LdapServer"
+          },
+          "SvcAccountDN": {
+            "Ref": "SvcAccountDN"
+          },
+          "SvcAccountPassword": {
+            "Ref": "SvcAccountPassword"
+          },
+          "UsersOUDN": {
+            "Ref": "UsersOUDN"
+          },
+          "osticketALBTargetGroupName": {
+            "Fn::GetAtt": [
+              "osticketALBTargetGroupStack",
+              "Outputs.TargetGroupName"
+            ]
+          },
+          "PrivateSubnetIDs": {
+            "Fn::Join": [
+              ",",
+              {
+                "Ref": "PrivateSubnetIDs"
+              }
+            ]
+          },
+          "SecurityGroupIdosticketInstance": {
+            "Fn::Join": [
+              ",",
+              [
+                {
+                  "Fn::GetAtt": [
+                    "osticketSecurityGroupStack",
+                    "Outputs.osticketSecurityGroupId"
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "osticketLoadBalancerName": {
+      "Description": "Name of the osticket Application Load Balancer",
+      "Value": {
+        "Fn::GetAtt": [
+          "osticketALBStack",
+          "Outputs.LoadBalancerName"
+        ]
+      }
+    },
+    "osticketLoadBalancerDns": {
+      "Description": "DNS name for the osticket ALB",
+      "Value": {
+        "Fn::GetAtt": [
+          "osticketALBStack",
+          "Outputs.LoadBalancerDns"
+        ]
+      }
+    },
+    "osticketSecurityGroupId": {
+      "Description": "Security Group ID for the osticket instances",
+      "Value": {
+        "Fn::GetAtt": [
+          "osticketSecurityGroupStack",
+          "Outputs.osticketSecurityGroupId"
+        ]
+      }
+    },
+    "osticketALBSecurityGroupId": {
+      "Description": "Security Group ID for the osticket Application Load Balancer",
+      "Value": {
+        "Fn::GetAtt": [
+          "osticketSecurityGroupStack",
+          "Outputs.osticketElbSecurityGroupId"
+        ]
+      }
+    }
+  }
+}
