@@ -592,7 +592,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "sed -i \"s|        <a href=[\\\"]login.php[\\\"]><?php echo __('Sign In'); ?></a> <?php|        <a href=[\\\"]login.php[\\\"]><?php echo __('Sign In'); ?></a> <?php echo __('to check the status of all your tickets.'); ?> <?php|\" /var/www/html/include/client/accesslink.inc.php",
+                      "sed -i \"s|        <a href=\"login.php\"><?php echo __('Sign In'); ?></a> <?php|        <a href=\"login.php\"><?php echo __('Sign In'); ?></a> <?php echo __('to check the status of all your tickets.'); ?> <?php|\" /var/www/html/include/client/accesslink.inc.php",
                       "\n"
                     ]
                   ]
