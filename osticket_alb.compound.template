@@ -110,7 +110,7 @@
     "osticketSecurityGroupStack": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_security_group.element.template",
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_security_group.element.template",
         "Parameters": {
           "VPC": {
             "Ref": "VPC"
@@ -122,7 +122,7 @@
     "osticketALBTargetGroupStack": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_alb_targetgroup.element.template",
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_targetgroup.element.template",
         "Parameters": {
           "VPC": {
             "Ref": "VPC"
@@ -137,7 +137,7 @@
         "osticketALBTargetGroupStack"
       ],
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_alb_public_ssl_443.element.template",
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_public_ssl_443.element.template",
         "Parameters": {
           "SslCertificateName": {
             "Ref": "ALBSslCertificateName"
@@ -175,7 +175,7 @@
         "osticketALBTargetGroupStack"
       ],
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/app-chemistry/templates/osticket_private_autoscale_alb.element.template",
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template",
         "Parameters": {
           "KeyPairName": {
             "Ref": "KeyPairName"
