@@ -1,30 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This templates creates one security group for osticket instances, and one for their load balancer",
-  "Parameters": {
-    "UseELB": {
-      "Description": "Set to true if using an ELB in front of osticket; otherwise set to false",
-      "Type": "String",
-      "Default": "true",
-      "AllowedValues": [
-        "true",
-        "false"
-      ]
-    },
-    "VPC": {
-      "Description": "VPC ID",
-      "Type": "AWS::EC2::VPC::Id"
-    }
-  },
   "Conditions": {
-    "UseELB": {
-      "Fn::Equals": [
-        {
-          "Ref": "UseELB"
-        },
-        "true"
-      ]
-    },
     "NoELB": {
       "Fn::Equals": [
         {
@@ -32,57 +8,82 @@
         },
         "false"
       ]
+    },
+    "UseELB": {
+      "Fn::Equals": [
+        {
+          "Ref": "UseELB"
+        },
+        "true"
+      ]
+    }
+  },
+  "Description": "This templates creates one security group for osticket instances, and one for their load balancer",
+  "Outputs": {
+    "osticketElbSecurityGroupId": {
+      "Condition": "UseELB",
+      "Description": "Security Group ID for the osticket Elastic Load Balancer",
+      "Value": {
+        "Ref": "osticketElbSecurityGroup"
+      }
+    },
+    "osticketSecurityGroupId": {
+      "Description": "Security Group ID for the osticket instances",
+      "Value": {
+        "Ref": "osticketSecurityGroup"
+      }
+    }
+  },
+  "Parameters": {
+    "UseELB": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default": "true",
+      "Description": "Set to true if using an ELB in front of osticket; otherwise set to false",
+      "Type": "String"
+    },
+    "VPC": {
+      "Description": "VPC ID",
+      "Type": "AWS::EC2::VPC::Id"
     }
   },
   "Resources": {
-    "osticketSecurityGroup": {
-      "Type": "AWS::EC2::SecurityGroup",
-      "Properties": {
-        "GroupDescription": "Enable osticket access from ELB",
-        "VpcId": {
-          "Ref": "VPC"
-        },
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Join": [
-                "",
-                [
-                  "osticket-",
-                  {
-                    "Ref": "AWS::StackName"
-                  }
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    "ElbToosticketIngressTcp80": {
-      "Type": "AWS::EC2::SecurityGroupIngress",
+    "AlbToosticketEgressTcp80": {
       "Condition": "UseELB",
       "Properties": {
+        "DestinationSecurityGroupId": {
+          "Ref": "osticketSecurityGroup"
+        },
+        "FromPort": "80",
+        "GroupId": {
+          "Ref": "osticketElbSecurityGroup"
+        },
+        "IpProtocol": "tcp",
+        "ToPort": "80"
+      },
+      "Type": "AWS::EC2::SecurityGroupEgress"
+    },
+    "ElbToosticketIngressTcp80": {
+      "Condition": "UseELB",
+      "Properties": {
+        "FromPort": "80",
         "GroupId": {
           "Ref": "osticketSecurityGroup"
         },
         "IpProtocol": "tcp",
-        "FromPort": "80",
-        "ToPort": "80",
         "SourceSecurityGroupId": {
           "Ref": "osticketElbSecurityGroup"
-        }
-      }
+        },
+        "ToPort": "80"
+      },
+      "Type": "AWS::EC2::SecurityGroupIngress"
     },
     "osticketElbSecurityGroup": {
-      "Type": "AWS::EC2::SecurityGroup",
       "Condition": "UseELB",
       "Properties": {
         "GroupDescription": "Enable osticket ELB access from the Internet",
-        "VpcId": {
-          "Ref": "VPC"
-        },
         "Tags": [
           {
             "Key": "Name",
@@ -98,51 +99,50 @@
               ]
             }
           }
-        ]
-      }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      },
+      "Type": "AWS::EC2::SecurityGroup"
+    },
+    "osticketSecurityGroup": {
+      "Properties": {
+        "GroupDescription": "Enable osticket access from ELB",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "osticket-",
+                  {
+                    "Ref": "AWS::StackName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      },
+      "Type": "AWS::EC2::SecurityGroup"
     },
     "PublicToElbIngressTcp443": {
-      "Type": "AWS::EC2::SecurityGroupIngress",
       "Condition": "UseELB",
       "Properties": {
-        "GroupId": {
-          "Ref": "osticketElbSecurityGroup"
-        },
-        "IpProtocol": "tcp",
+        "CidrIp": "0.0.0.0/0",
         "FromPort": "443",
-        "ToPort": "443",
-        "CidrIp": "0.0.0.0/0"
-      }
-    },
-    "AlbToosticketEgressTcp80": {
-      "Type": "AWS::EC2::SecurityGroupEgress",
-      "Condition": "UseELB",
-      "Properties": {
         "GroupId": {
           "Ref": "osticketElbSecurityGroup"
         },
         "IpProtocol": "tcp",
-        "FromPort": "80",
-        "ToPort": "80",
-        "DestinationSecurityGroupId": {
-          "Ref": "osticketSecurityGroup"
-        }
-      }
-    }
-  },
-  "Outputs": {
-    "osticketSecurityGroupId": {
-      "Value": {
-        "Ref": "osticketSecurityGroup"
+        "ToPort": "443"
       },
-      "Description": "Security Group ID for the osticket instances"
-    },
-    "osticketElbSecurityGroupId": {
-      "Condition": "UseELB",
-      "Value": {
-        "Ref": "osticketElbSecurityGroup"
-      },
-      "Description": "Security Group ID for the osticket Elastic Load Balancer"
+      "Type": "AWS::EC2::SecurityGroupIngress"
     }
   }
 }
