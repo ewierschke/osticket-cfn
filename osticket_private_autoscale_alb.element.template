@@ -955,6 +955,17 @@
                     ]
                   ]
                 }
+              },
+              "50-mailsetup-postmap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/sbin/postmap /etc/postfix/sasl_passwd",
+                      "\n"
+                    ]
+                  ]
+                }
               }
             }
           },
