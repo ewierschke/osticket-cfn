@@ -636,7 +636,11 @@
                   "Fn::Join": [
                     "",
                     [
-                      "wget -O /var/www/html/include/plugins/auth-ldap.phar http://osticket.com/sites/default/files/download/plugin/auth-ldap.phar",
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/auth-ldap.phar /var/www/html/include/plugins/auth-ldap.phar",
                       "\n"
                     ]
                   ]
@@ -647,7 +651,11 @@
                   "Fn::Join": [
                     "",
                     [
-                      "wget -O /var/www/html/include/plugins/storage-s3.phar http://osticket.com/sites/default/files/download/plugin/storage-s3.phar",
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/storage-s3.phar /var/www/html/include/plugins/storage-s3.phar",
                       "\n"
                     ]
                   ]
