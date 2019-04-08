@@ -237,7 +237,7 @@
             ]
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_public_ssl_443.element.template"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_public_ssl_443.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     },
@@ -248,7 +248,7 @@
             "Ref": "VPC"
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_targetgroup.element.template"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_alb_targetgroup.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     },
@@ -323,7 +323,7 @@
             "Ref": "UsersOUDN"
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     },
@@ -335,7 +335,7 @@
             "Ref": "VPC"
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_security_group.element.template"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_security_group.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     },
@@ -346,7 +346,7 @@
             "Ref": "SNSSubscriptionEmail"
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_sns_topic_subscript.element.template"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_sns_topic_subscript.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     }
