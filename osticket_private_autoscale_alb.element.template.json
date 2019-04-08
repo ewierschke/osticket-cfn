@@ -432,7 +432,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y --enablerepo=ius,epel install php72u php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache",
+                      "yum -y --enablerepo=ius,epel install php72u php72u-cli php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache",
                       "\n"
                     ]
                   ]
