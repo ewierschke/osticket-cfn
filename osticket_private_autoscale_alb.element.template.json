@@ -205,7 +205,7 @@
             {
               "Effect": "Allow",
               "Action": "logs:CreateLogStream",
-              "Resource": "arn:aws:logs:*:*:log-group:osticketLogGroup"
+              "Resource": "arn:aws:logs:*:*:log-group:osticketLogGroup:*"
             },
             {
               "Effect": "Allow",
