@@ -1122,6 +1122,17 @@
                     ]
                   ]
                 }
+              },
+              "40-userimport_test_run": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "bash /usr/local/bin/userimport.sh",
+                      "\n"
+                    ]
+                  ]
+                }
               }
             },
             "files": {
