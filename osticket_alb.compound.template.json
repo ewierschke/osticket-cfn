@@ -339,7 +339,7 @@
       },
       "Type": "AWS::CloudFormation::Stack"
     },
-    "PWMSNSTopicSubscriptStack": {
+    "osticketSNSTopicSubscriptStack": {
       "Properties": {
         "Parameters": {
           "SNSSubscriptionEmail": {
