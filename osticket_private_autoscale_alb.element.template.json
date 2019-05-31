@@ -90,7 +90,7 @@
     "UsersOUDN": {
       "Description": "Distinguished Name (DN) of the path from which to import LDAP users",
       "Type": "String",
-      "Default": "CN=Users,DC=ad,DC=example,DC=com",
+      "Default": "DC=ad,DC=example,DC=com",
       "MinLength": "1"
     }
   },
