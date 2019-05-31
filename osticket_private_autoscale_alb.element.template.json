@@ -157,7 +157,6 @@
     },
     "osticketConfigInstanceS3Access": {
       "Properties": {
-        "Description": "Policy for osticket instance role to access appropriate s3 bucket for osticket config",
         "PolicyDocument": {
           "Statement": [
             {
@@ -185,13 +184,53 @@
           ],
           "Version": "2012-10-17"
         },
+        "PolicyName": "osticketConfigInstanceS3Access",
         "Roles": [
           {
             "Ref": "osticketInstanceRole"
           }
         ]
       },
-      "Type": "AWS::IAM::ManagedPolicy"
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketCloudWatchAgent": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "logs:CreateLogGroup",
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:CreateLogStream",
+              "Resource": "arn:aws:logs:::log-group:osticketLogGroup"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:PutLogEvents",
+              "Resource": [
+                "arn:aws:logs:::log-group:osticketLogGroup",
+                "arn:aws:logs:::log-group:osticketLogGroup::"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:DescribeLogStreams",
+              "Resource": "arn:aws:logs:::log-group:osticketLogGroup"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketCloudWatchAgent",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
     },
     "osticketAutoScalingGroup": {
       "CreationPolicy": {
@@ -291,7 +330,8 @@
               "i-firewall_httpd",
               "j-ldapimport",
               "k-iamsshusers",
-              "l-finalize"
+              "l-cloudwatchagentsetup",
+              "m-finalize"
             ],
             "NewConf": [
               "a-cfnsetup",
@@ -304,7 +344,8 @@
               "h-mailsetup",
               "i-firewall_httpd",
               "k-iamsshusers",
-              "l-finalize"
+              "l-cloudwatchagentsetup",
+              "m-finalize"
             ]
           },
           "a-cfnsetup": {
@@ -1265,7 +1306,121 @@
               }
             }
           },
-          "l-finalize": {
+          "l-cloudwatchagentsetup": {
+            "commands": {
+              "10-get-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "wget https://s3.amazonaws.com/amazoncloudwatch-agent/linux/amd64/latest/AmazonCloudWatchAgent.zip",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-unpack-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "unzip AmazonCloudWatchAgent.zip -d /usr/local/bin",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-install-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /usr/local/bin && bash -xe /usr/local/bin/install.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-enable-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "systemctl enable amazon-cloudwatch-agent.service",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "50-start-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "systemctl start amazon-cloudwatch-agent.service",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "60-get-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/osticketcloudwatchagent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
+                    ]
+                  ]
+                }
+              },
+              "61-chmod-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 640 /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "62-chown-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown root:root /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "70-inject-custom-agent-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/opt/aws/amazon-cloudwatch-agent/bin/",
+                      "amazon-cloudwatch-agent-ctl",
+                      " -a fetch-config -m ec2 -c",
+                      " file:/opt/aws/amazon-cloudwatch-agent/etc/",
+                      "amazon-cloudwatch-agent.json -s"
+                    ]
+                  ]
+                }
+              }
+            },
+            "packages": {
+              "yum": {
+                "unzip": []
+              }
+            }
+          },
+          "m-finalize": {
             "commands": {
               "10-signal-success": {
                 "command": {
