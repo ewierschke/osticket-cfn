@@ -1064,6 +1064,21 @@
                   ]
                 }
               },
+              "25-get-httpd-logging-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/ostickethttpd.conf /etc/httpd/conf.d/ostickethttpd.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
               "30-httpd-start": {
                 "command": {
                   "Fn::Join": [
@@ -1415,11 +1430,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "/opt/aws/amazon-cloudwatch-agent/bin/",
-                      "amazon-cloudwatch-agent-ctl",
-                      " -a fetch-config -m ec2 -c",
-                      " file:/opt/aws/amazon-cloudwatch-agent/etc/",
-                      "amazon-cloudwatch-agent.json -s"
+                      "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
                     ]
                   ]
                 }
