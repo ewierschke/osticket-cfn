@@ -72,6 +72,10 @@
       "Description": "ID of the security group for osticket instances",
       "Type": "AWS::EC2::SecurityGroup::Id"
     },
+    "osticketSNSTopicARN": {
+      "Description": "ARN of the SNS Topic to which to send auto scale action notifications",
+      "Type": "String"
+    },
     "SvcAccountDN": {
       "Description": "Distinguished Name (DN) of the osTicket Service Account to query LDAP directory",
       "Type": "String",
@@ -256,6 +260,19 @@
         "MinSize": {
           "Ref": "MinCapacity"
         },
+        "NotificationConfigurations": [
+          {
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ],
+            "TopicARN": {
+              "Ref": "osticketSNSTopicARN"
+            }
+          }
+        ],
         "Tags": [
           {
             "Key": "Name",

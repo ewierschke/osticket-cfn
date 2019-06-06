@@ -255,7 +255,8 @@
     "osticketAutoScaleStack": {
       "DependsOn": [
         "osticketALBTargetGroupStack",
-        "osticketSecurityGroupStack"
+        "osticketSecurityGroupStack",
+        "osticketSNSTopicSubscriptStack"
       ],
       "Properties": {
         "Parameters": {
@@ -311,6 +312,12 @@
                   ]
                 }
               ]
+            ]
+          },
+          "osticketSNSTopicARN": {
+            "Fn::GetAtt": [
+              "osticketSNSTopicSubscriptStack",
+              "Outputs.SNSTopicARN"
             ]
           },
           "SvcAccountDN": {
