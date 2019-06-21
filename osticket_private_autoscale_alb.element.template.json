@@ -501,7 +501,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y install php72u php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache php72u-xml php72u-json",
+                      "yum -y install php72u php72u-cli php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache php72u-xml php72u-json",
                       "\n"
                     ]
                   ]
