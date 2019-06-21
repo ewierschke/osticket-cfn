@@ -485,23 +485,12 @@
                   ]
                 }
               },
-              "20-install-remi": {
+              "20-install-ius": {
                 "command": {
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y install http://rpms.remirepo.net/enterprise/remi-release-7.rpm",
-                      "\n"
-                    ]
-                  ]
-                }
-              },
-              "21-enable-remi": {
-                "command": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "yum-config-manager --enable remi-php56",
+                      "rpm -ivh https://centos7.iuscommunity.org/ius-release.rpm",
                       "\n"
                     ]
                   ]
@@ -512,7 +501,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y install php php-ldap php-mysqli php-gd php-imap php-mbstring php-intl php-apcu php-opcache",
+                      "yum -y install php72u php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache php72u-xml php72u-json",
                       "\n"
                     ]
                   ]
