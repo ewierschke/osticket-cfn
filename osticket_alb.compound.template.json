@@ -330,7 +330,7 @@
             "Ref": "UsersOUDN"
           }
         },
-        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template.json"
+        "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/testing/osticket_private_autoscale_alb.element.template.json"
       },
       "Type": "AWS::CloudFormation::Stack"
     },
