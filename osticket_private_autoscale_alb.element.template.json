@@ -534,7 +534,7 @@
                     [
                       "cd /root/ && git clone https://github.com/osTicket/osTicket",
                       "\n",
-                      "cd /root/osTicket && git checkout tags/v1.10"
+                      "cd /root/osTicket && git checkout tags/v1.10.6"
                     ]
                   ]
                 }
