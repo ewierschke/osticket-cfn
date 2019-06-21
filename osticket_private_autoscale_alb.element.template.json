@@ -532,7 +532,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "cd /root/ && git clone https://github.com/ewierschke/osTicket",
+                      "cd /root/ && git clone https://github.com/osTicket/osTicket",
                       "\n",
                       "cd /root/osTicket && git checkout tags/v1.10"
                     ]
