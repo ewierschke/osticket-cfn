@@ -348,7 +348,8 @@
               "j-ldapimport",
               "k-iamsshusers",
               "l-cloudwatchagentsetup",
-              "m-finalize"
+              "m-inspectoragentsetup",
+              "n-finalize"
             ],
             "NewConf": [
               "a-cfnsetup",
@@ -362,7 +363,8 @@
               "i-firewall_httpd",
               "k-iamsshusers",
               "l-cloudwatchagentsetup",
-              "m-finalize"
+              "m-inspectoragentsetup",
+              "n-finalize"
             ]
           },
           "a-cfnsetup": {
@@ -1449,9 +1451,90 @@
               }
             }
           },
-          "m-finalize": {
+          "m-inspectoragentsetup": {
             "commands": {
-              "10-signal-success": {
+              "10-get-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "wget -O inspectorinstall https://inspector-agent.amazonaws.com/linux/latest/install",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-disable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=1:gpgcheck=0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "21-disable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 1:localpkg_gpgcheck = 0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-run-install-script": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "bash inspectorinstall",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-enable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=0:gpgcheck=1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "41-enable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 0:localpkg_gpgcheck = 1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "n-finalize": {
+            "commands": {
+              "10-safety-yum-update": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y update",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-signal-success": {
                 "command": {
                   "Fn::Join": [
                     "",
