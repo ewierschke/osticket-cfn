@@ -1,0 +1,1812 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This template deploys a osticket instance from launch config in an autoscale group behind an ALB using watchmaker.",
+  "Parameters": {
+    "AmiId": {
+      "Description": "AMI ID",
+      "Type": "String",
+      "Default": ""
+    },
+    "DesiredCapacity": {
+      "Description": "The number of instances the autoscale group will spin up initially",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "AdminIAMGroup": {
+      "Description": "ID of the IAM group to be granted SSH access to osticket instances",
+      "Type": "String"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type for the osticket Instance",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "m4.large",
+        "m4.xlarge"
+      ]
+    },
+    "KeyPairName": {
+      "Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "LdapServer": {
+      "Description": "Name of LDAP server from which to import osTicket users",
+      "Type": "String",
+      "Default": "ad.example.com",
+      "MinLength": "1"
+    },
+    "MaxCapacity": {
+      "Description": "The maximum number of instances for the autoscale group",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "MinCapacity": {
+      "Description": "The minimum number of instances for the autoscale group",
+      "Type": "String",
+      "MinLength": "1",
+      "Default": "1"
+    },
+    "osticketALBTargetGroupName": {
+      "Description": "Name of the ALB osticket Target Group",
+      "Type": "String",
+      "MinLength": "1"
+    },
+    "osticketConfigBucketName": {
+      "Description": "Name of the S3 bucket where the osticket config should be pulled and stored",
+      "Type": "String"
+    },
+    "PrivateSubnetIDs": {
+      "Description": "Private Subnet ID where the osticket instance(s) will run. (only select one, load balancing not tested)",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "SecurityGroupIdosticketInstance": {
+      "Description": "ID of the security group for osticket instances",
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "osticketSNSTopicARN": {
+      "Description": "ARN of the SNS Topic to which to send auto scale action notifications",
+      "Type": "String"
+    },
+    "SvcAccountDN": {
+      "Description": "Distinguished Name (DN) of the osTicket Service Account to query LDAP directory",
+      "Type": "String",
+      "Default": "CN=svc_account,CN=Users,DC=ad,DC=example,DC=com",
+      "MinLength": "1"
+    },
+    "SvcAccountPassword": {
+      "Description": "Password of the osTicket Service Account to query LDAP directory. Must be at least 8 characters containing letters, numbers and symbols",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "32",
+      "AllowedPattern": "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+      "NoEcho": "true",
+      "Default": "Password123"
+    },
+    "UsersOUDN": {
+      "Description": "Distinguished Name (DN) of the path from which to import LDAP users",
+      "Type": "String",
+      "Default": "DC=ad,DC=example,DC=com",
+      "MinLength": "1"
+    }
+  },
+  "Resources": {
+    "AllowAdminIAMGroupSSHKeyAccess": {
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Action": [
+                "iam:GetGroup"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":group/",
+                      {
+                        "Ref": "AdminIAMGroup"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "iam:ListSSHPublicKeys",
+                "iam:GetSSHPublicKey"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":user/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "PolicyName": "AllowAdminIAMGroupSSHKeyAccess",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketConfigInstanceS3Access": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:PutObjectAcl"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:s3:::",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketConfigInstanceS3Access",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketCloudWatchAgent": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "logs:CreateLogGroup",
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:CreateLogStream",
+              "Resource": "arn:aws:logs:*:*:log-group:osticketLogGroup:*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:PutLogEvents",
+              "Resource": [
+                "arn:aws:logs:*:*:log-group:osticketLogGroup",
+                "arn:aws:logs:*:*:log-group:osticketLogGroup:*:*"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:DescribeLogStreams",
+              "Resource": "arn:aws:logs:*:*:log-group:osticketLogGroup:*:*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:DescribeLogGroups",
+              "Resource": "arn:aws:logs:*:*:log-group:osticketLogGroup:*:*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketCloudWatchAgent",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketSSMManagedInstanceCore": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ssm:DescribeAssociation",
+                "ssm:GetDeployablePatchSnapshotForInstance",
+                "ssm:GetDocument",
+                "ssm:DescribeDocument",
+                "ssm:GetManifest",
+                "ssm:GetParameter",
+                "ssm:GetParameters",
+                "ssm:ListAssociations",
+                "ssm:ListInstanceAssociations",
+                "ssm:PutInventory",
+                "ssm:PutComplianceItems",
+                "ssm:PutConfigurePackageResult",
+                "ssm:UpdateAssociationStatus",
+                "ssm:UpdateInstanceAssociationStatus",
+                "ssm:UpdateInstanceInformation"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ssmmessages:CreateControlChannel",
+                "ssmmessages:CreateDataChannel",
+                "ssmmessages:OpenControlChannel",
+                "ssmmessages:OpenDataChannel"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ec2messages:AcknowledgeMessage",
+                "ec2messages:DeleteMessage",
+                "ec2messages:FailMessage",
+                "ec2messages:GetEndpoint",
+                "ec2messages:GetMessages",
+                "ec2messages:SendReply"
+              ],
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketSSMManagedInstanceCore",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketAutoScalingGroup": {
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": {
+            "Ref": "DesiredCapacity"
+          },
+          "Timeout": "PT25M"
+        }
+      },
+      "Properties": {
+        "DesiredCapacity": {
+          "Ref": "DesiredCapacity"
+        },
+        "HealthCheckGracePeriod": "3600",
+        "HealthCheckType": "ELB",
+        "LaunchConfigurationName": {
+          "Ref": "osticketLaunchConfig"
+        },
+        "MaxSize": {
+          "Ref": "MaxCapacity"
+        },
+        "MinSize": {
+          "Ref": "MinCapacity"
+        },
+        "NotificationConfigurations": [
+          {
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ],
+            "TopicARN": {
+              "Ref": "osticketSNSTopicARN"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "PropagateAtLaunch": "true",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        ],
+        "TargetGroupARNs": [
+          {
+            "Ref": "osticketALBTargetGroupName"
+          }
+        ],
+        "VPCZoneIdentifier": {
+          "Ref": "PrivateSubnetIDs"
+        }
+      },
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "UpdatePolicy": {
+        "AutoScalingReplacingUpdate": {
+          "WillReplace": "true"
+        }
+      }
+    },
+    "osticketInstanceProfile": {
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::InstanceProfile"
+    },
+    "osticketInstanceRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Path": "/"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "osticketLaunchConfig": {
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "ExistingConf": [
+              "a-cfnsetup",
+              "b-watchmaker",
+              "c-preppackages",
+              "d-osticketinstall",
+              "e-osticketplugins",
+              "f-osticketexist",
+              "g-selinuxconf",
+              "h-mailsetup",
+              "i-firewall_httpd",
+              "j-ldapimport",
+              "k-iamsshusers",
+              "l-cloudwatchagentsetup",
+              "m-inspectoragentsetup",
+              "n-ssmagentsetup",
+              "o-finalize"
+            ],
+            "NewConf": [
+              "a-cfnsetup",
+              "b-watchmaker",
+              "c-preppackages",
+              "d-osticketinstall",
+              "e-osticketplugins",
+              "f-osticketnew",
+              "g-selinuxconf",
+              "h-mailsetup",
+              "i-firewall_httpd",
+              "k-iamsshusers",
+              "l-cloudwatchagentsetup",
+              "m-inspectoragentsetup",
+              "n-ssmagentsetup",
+              "o-finalize"
+            ]
+          },
+          "a-cfnsetup": {
+            "files": {
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n",
+                      "interval=1",
+                      "\n",
+                      "verbose=true",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.osticketLaunchConfig.Metadata\n",
+                      "action=/opt/aws/bin/cfn-init -v -c update",
+                      " --stack ",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      " --resource osticketLaunchConfig",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "b-watchmaker": {
+            "commands": {
+              "10-watchmaker-prep": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "PIP_URL=https://bootstrap.pypa.io/get-pip.py && PYPI_URL=https://pypi.org/simple && curl \"$PIP_URL\" | python - --index-url=\"$PYPI_URL\" && pip install --index-url=\"$PYPI_URL\" --upgrade pip setuptools watchmaker",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-watchmaker-launch": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "watchmaker --log-level debug -n --log-dir=/var/log/watchmaker",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "c-preppackages": {
+            "commands": {
+              "10-install-epelandothers": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y install epel-release wget unzip cyrus-sasl-plain",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "11-enable-epel": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum-config-manager --enable epel",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-install-ius": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "rpm -ivh https://centos7.iuscommunity.org/ius-release.rpm",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-install-phpanddeps": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y install php72u php72u-cli php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache php72u-xml php72u-json",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "packages": {
+              "yum": {
+                "git": []
+              }
+            }
+          },
+          "d-osticketinstall": {
+            "commands": {
+              "10-git-osticket": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /root/ && git clone https://github.com/osTicket/osTicket",
+                      "\n",
+                      "cd /root/osTicket && git checkout tags/v1.12"
+                    ]
+                  ]
+                }
+              },
+              "20-deploy1-osticket": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /root/osTicket && php manage.php deploy --setup /var/www/html",
+                      "\n"
+                    ]
+                  ]
+                },
+                "ignoreErrors": "true"
+              },
+              "30-deploy2-osticket": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /root/osTicket && php manage.php deploy --setup /var/www/html",
+                      "\n"
+                    ]
+                  ]
+                },
+                "ignoreErrors": "true"
+              },
+              "35-apikeywildcard-get-file1": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/manage.api_keys.yaml /var/www/html/include/i18n/en_US/help/tips/manage.api_keys.yaml",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "36-apikeywildcard-get-file2": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/class.api.php /var/www/html/include/class.api.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-apache-owner": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown -R apache:apache /var/www/html/*",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "50-reperm": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "find /var/www/html -type f -perm 644 -exec chmod 0664 {} \\;",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "60-selinux-context": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_content_t /var/www/html -R",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "70-php-timezone": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's|;date.timezone =|date.timezone = America/New_York|' /etc/php.ini",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "71-php-uploadsize": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's|upload_max_filesize = 2M|upload_max_filesize = 10M|' /etc/php.ini",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "80-staff-login-tip": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's|Email or Username|Username|' /var/www/html/include/staff/login.tpl.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "81-client-login-tip": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's|Email or Username|Username|' /var/www/html/include/client/login.inc.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "82-ticket-status-guidance1": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i \"s|        <?php echo __('Have an account with us?'); ?>|        <?php echo __('If you have an account with us you can '); ?>|\" /var/www/html/include/client/accesslink.inc.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "83-ticket-status-guidance2": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i \"s|        <a href=\"login.php\"><?php echo __('Sign In'); ?></a> <?php|        <a href=\"login.php\"><?php echo __('Sign In'); ?></a> <?php echo __('to check the status of all your tickets.'); ?> <?php|\" /var/www/html/include/client/accesslink.inc.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "files": {
+              "/etc/cron.d/osticketcron": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "*/1 * * * * root /usr/bin/php /var/www/html/api/cron.php",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000644",
+                "owner": "root"
+              }
+            }
+          },
+          "e-osticketplugins": {
+            "commands": {
+              "10-get-authplugin": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/auth-ldap.phar /var/www/html/include/plugins/auth-ldap.phar",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-get-s3plugin": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/storage-s3.phar /var/www/html/include/plugins/storage-s3.phar",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-chown-plugins": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown apache:apache /var/www/html/include/plugins/auth-ldap.phar && chown apache:apache /var/www/html/include/plugins/storage-s3.phar",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "31-chcon-plugins": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_content_t /var/www/html/include/plugins/auth-ldap.phar && chcon -t httpd_sys_content_t /var/www/html/include/plugins/storage-s3.phar",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-git-mldap-plugin": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /root/ && git clone https://github.com/ewierschke/osticket-multildap-auth",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "41-mv-mldap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "mv /root/osticket-multildap-auth/multi-ldap /var/www/html/include/plugins/",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "42-prep-syncfile": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "touch /var/www/html/scp/sync_mldap.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "43-chmod-syncfile": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 644 /var/www/html/scp/sync_mldap.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "44-chcon-syncfile": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_rw_content_t /var/www/html/scp/sync_mldap.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "45-chown-mldap-plugin": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown apache:apache /var/www/html/scp/sync_mldap.php && chown apache:apache /var/www/html/include/plugins/multi-ldap/ && chown apache:apache /var/www/html/include/plugins/multi-ldap/*",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "46-chcon-mldap-plugin": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_content_t /var/www/html/include/plugins/multi-ldap/ && chcon -t httpd_sys_content_t /var/www/html/include/plugins/multi-ldap/*",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "f-osticketexist": {
+            "commands": {
+              "10-get-prior-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/ost-config.php /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-chmod-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 0644 /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-chown-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown apache:apache /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-chcon-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_rw_content_t /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "43-cleanup": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "rm -rf /var/www/html/setup/",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "f-osticketnew": {
+            "commands": {
+              "10-copyexample": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cp /var/www/html/include/ost-sampleconfig.php /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-chmod-example": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 0664 /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-chown-example": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown apache:apache /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-chcon-example": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chcon -t httpd_sys_rw_content_t /var/www/html/include/ost-config.php",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "g-selinuxconf": {
+            "commands": {
+              "10-selinux-httpdsendmail": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "setsebool -P httpd_can_sendmail 1",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-selinux-connectdb": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "setsebool -P httpd_can_network_connect_db 1",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-selinux-connectldap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "setsebool -P httpd_can_connect_ldap 1",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "h-mailsetup": {
+            "commands": {
+              "10-mailsetup-getsaslpass": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/sasl_passwd /etc/postfix/sasl_passwd",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-mailsetup-getscript": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/main_cf.sh /usr/local/bin/main_cf.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-mailsetup-chscript": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 755 /usr/local/bin/main_cf.sh & chown root /usr/local/bin/main_cf.sh & chgrp root /usr/local/bin/main_cf.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-mailsetup-runscript": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/usr/local/bin/main_cf.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "50-mailsetup-postmap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/sbin/postmap /etc/postfix/sasl_passwd",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "i-firewall_httpd": {
+            "commands": {
+              "10-fw-start": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "service firewalld start",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-fw-adjust": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "setenforce 0 && firewall-cmd --permanent --add-service=http && setenforce 1",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "25-get-httpd-logging-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/ostickethttpd.conf /etc/httpd/conf.d/ostickethttpd.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-httpd-start": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "service httpd start",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-httpd-on": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chkconfig httpd on",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "j-ldapimport": {
+            "commands": {
+              "10-yum_perl": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y install perl perl-LDAP perl-Switch",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-wget_ldap-csvexport": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "wget -O /usr/local/bin/ldap-csvexport-1.9.tar.gz https://downloads.sourceforge.net/project/ldap-csvexport/ldap-csvexport-1.9.tar.gz",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-expand_ldap-csvexport": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "tar -xvf /usr/local/bin/ldap-csvexport-1.9.tar.gz -C /usr/local/bin/",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-userimport_test_run": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "bash /usr/local/bin/userimport.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "files": {
+              "/etc/cron.d/osticketuserimport": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "*/15 * * * * root /usr/bin/bash /usr/local/bin/userimport.sh",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000644",
+                "owner": "root"
+              },
+              "/usr/local/bin/userimport.sh": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "#!/bin/bash -e",
+                      "\n",
+                      "today=$(date +\"%Y_%m_%d\")",
+                      "\n",
+                      "/usr/local/bin/ldap-csvexport-1.9/ldap-csvexport.pl -H ",
+                      {
+                        "Ref": "LdapServer"
+                      },
+                      " -u ",
+                      {
+                        "Ref": "SvcAccountDN"
+                      },
+                      " -p '",
+                      {
+                        "Ref": "SvcAccountPassword"
+                      },
+                      "' -a name,mail -b ",
+                      {
+                        "Ref": "UsersOUDN"
+                      },
+                      " -s ',' -f '(objectclass=user)' > /tmp/${today}_ldapexport.csv",
+                      "\n",
+                      "#edit csv to remove entries without email addresses, remove line whenever \"\" found",
+                      "\n",
+                      "sed -i '/\"\"/d' /tmp/${today}_ldapexport.csv",
+                      "\n",
+                      "#change header to \"Name\",\"Email\"",
+                      "\n",
+                      "sed -i '0,/name/ s/name/Name/' /tmp/${today}_ldapexport.csv",
+                      "\n",
+                      "sed -i '0,/mail/ s/mail/Email/' /tmp/${today}_ldapexport.csv",
+                      "\n",
+                      "today=$(date +\"%Y_%m_%d\") && /bin/php /var/www/html/manage.php user -f /tmp/${today}_ldapexport.csv import &> /usr/local/bin/${today}_importresults",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000755",
+                "owner": "root"
+              }
+            }
+          },
+          "k-iamsshusers": {
+            "commands": {
+              "10-get_sshusermgmt": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/usermgmt.sh /usr/local/bin/usermgmt.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-ch_sshusermgmt": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 755 /usr/local/bin/usermgmt.sh & chown root /usr/local/bin/usermgmt.sh & chgrp root /usr/local/bin/usermgmt.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-configure_sshd_command": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:#AuthorizedKeysCommand none:AuthorizedKeysCommand /usr/local/bin/authorized_keys_command.sh:g' /etc/ssh/sshd_config",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-configure_sshd_commanduser": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:#AuthorizedKeysCommandUser nobody:AuthorizedKeysCommandUser nobody:g' /etc/ssh/sshd_config",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "50-create_groupnamefile": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "echo ",
+                      {
+                        "Ref": "AdminIAMGroup"
+                      },
+                      " > /usr/local/bin/groupname\n"
+                    ]
+                  ]
+                }
+              },
+              "60-sshusermgmt": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/usr/local/bin/usermgmt.sh -G $(cat /usr/local/bin/groupname)",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "files": {
+              "/etc/cron.d/usermgmt": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "*/8 * * * * root /usr/local/bin/usermgmt.sh -G $(cat /usr/local/bin/groupname)",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000644",
+                "owner": "root"
+              },
+              "/usr/local/bin/authorized_keys_command.sh": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "#!/bin/bash -e",
+                      "\n",
+                      "if [ -z \"$1\" ]; then",
+                      "\n",
+                      "  exit 1",
+                      "\n",
+                      "fi",
+                      "\n",
+                      "aws iam list-ssh-public-keys --user-name \"$1\" --query \"SSHPublicKeys[?Status == 'Active'].[SSHPublicKeyId]\" --output text | while read KeyId; do",
+                      "\n",
+                      "  aws iam get-ssh-public-key --user-name \"$1\" --ssh-public-key-id \"$KeyId\" --encoding SSH --query \"SSHPublicKey.SSHPublicKeyBody\" --output text",
+                      "\n",
+                      "done",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000755",
+                "owner": "root"
+              }
+            }
+          },
+          "l-cloudwatchagentsetup": {
+            "commands": {
+              "10-get-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "wget https://s3.amazonaws.com/amazoncloudwatch-agent/linux/amd64/latest/AmazonCloudWatchAgent.zip",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-unpack-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "unzip AmazonCloudWatchAgent.zip -d /usr/local/bin",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-install-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cd /usr/local/bin && bash -xe /usr/local/bin/install.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-enable-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "systemctl enable amazon-cloudwatch-agent.service",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "50-start-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "systemctl start amazon-cloudwatch-agent.service",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "60-get-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/osticketcloudwatchagent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
+                    ]
+                  ]
+                }
+              },
+              "61-chmod-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chmod 640 /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "62-chown-conf": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "chown root:root /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "70-inject-custom-agent-config": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
+                    ]
+                  ]
+                }
+              }
+            },
+            "packages": {
+              "yum": {
+                "unzip": []
+              }
+            }
+          },
+          "m-inspectoragentsetup": {
+            "commands": {
+              "10-get-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "wget -O inspectorinstall https://inspector-agent.amazonaws.com/linux/latest/install",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-disable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=1:gpgcheck=0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "21-disable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 1:localpkg_gpgcheck = 0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-run-install-script": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "bash inspectorinstall",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "40-enable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=0:gpgcheck=1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "41-enable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 0:localpkg_gpgcheck = 1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "n-ssmagentsetup": {
+            "commands": {
+              "10-disable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=1:gpgcheck=0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "11-disable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 1:localpkg_gpgcheck = 0:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-run-install-script": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "30-enable-gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:gpgcheck=0:gpgcheck=1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "31-enable-localpkg_gpgcheck": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "sed -i 's:localpkg_gpgcheck = 0:localpkg_gpgcheck = 1:g' /etc/yum.conf",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "o-finalize": {
+            "commands": {
+              "10-safety-yum-update": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y update",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "20-signal-success": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "cfn-signal -e 0 ",
+                      "   --stack ",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      "   --resource osticketAutoScalingGroup",
+                      "   --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ";sleep 30;reboot now\n"
+                    ]
+                  ]
+                },
+                "ignoreErrors": "true"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "20",
+              "VolumeType": "gp2",
+              "DeleteOnTermination": "true"
+            }
+          }
+        ],
+        "IamInstanceProfile": {
+          "Ref": "osticketInstanceProfile"
+        },
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "KeyPairName"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "SecurityGroupIdosticketInstance"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -xe\n\n",
+                "# Export cert bundle ENVs\n",
+                "export AWS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt\n",
+                "export REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt\n\n",
+                "# Get pip\n",
+                "PIP_URL=https://bootstrap.pypa.io/get-pip.py\n",
+                "PYPI_URL=https://pypi.org/simple\n",
+                "curl \"$PIP_URL\" | python - --index-url=\"$PYPI_URL\"\n",
+                "\n\n",
+                "# Add pip to path\n",
+                "hash pip 2> /dev/null || ",
+                "PATH=\"${PATH}:/usr/local/bin\"",
+                "\n\n",
+                "# Upgrade pip and setuptools\n",
+                "PYPI_URL=https://pypi.org/simple\n",
+                "PYPI_HOST=$(echo $PYPI_URL |sed -e \"s/[^/]*\\/\\/\\([^@]*@\\)\\?\\([^:/]*\\).*/\\2/\")\n",
+                "pip install",
+                " --index-url=\"$PYPI_URL\"",
+                " --trusted-host=\"$PYPI_HOST\"",
+                " --upgrade pip setuptools\n\n",
+                "# Fix python urllib3 warnings\n",
+                "yum -y install gcc python-devel libffi-devel openssl-devel\n",
+                "pip install",
+                " --index-url=\"$PYPI_URL\"",
+                " --upgrade cffi\n",
+                "pip install",
+                " --index-url=\"$PYPI_URL\"",
+                " --upgrade pyopenssl ndg-httpsclient pyasn1 'cryptography<2.2;python_version<\"2.7\"' 'cryptography;python_version>=\"2.7\"'",
+                "\n\n",
+                "if [[ $(rpm --quiet -q aws-cfn-bootstrap || pip show --quiet aws-cfn-bootstrap)$? -ne 0 ]]\n",
+                "then\n",
+                "  # Get cfn utils\n",
+                "  pip install",
+                " --index-url=\"$PYPI_URL\"",
+                " --upgrade --upgrade-strategy only-if-needed https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n\n",
+                "  # Fixup cfn utils\n",
+                "  INITDIR=$(find -L /opt/aws/apitools/cfn-init/init -name redhat",
+                " 2> /dev/null || echo /usr/init/redhat)\n",
+                "  chmod 775 ${INITDIR}/cfn-hup\n",
+                "  ln -f -s ${INITDIR}/cfn-hup /etc/rc.d/init.d/cfn-hup\n",
+                "  chkconfig --add cfn-hup\n",
+                "  chkconfig cfn-hup on\n",
+                "  mkdir -p /opt/aws/bin\n",
+                "  BINDIR=$(find -L /opt/aws/apitools/cfn-init -name bin",
+                " 2> /dev/null || echo /usr/bin)\n",
+                "  for SCRIPT in cfn-elect-cmd-leader cfn-get-metadata cfn-hup",
+                " cfn-init cfn-send-cmd-event cfn-send-cmd-result cfn-signal\n",
+                "  do\n",
+                "    ln -s ${BINDIR}/${SCRIPT} /opt/aws/bin/${SCRIPT} 2> /dev/null || ",
+                "    echo Skipped symbolic link, /opt/aws/bin/${SCRIPT} already exists\n",
+                "  done\n\n",
+                "fi\n\n",
+                "# Remove gcc now that it is no longer needed\n",
+                "yum -y remove gcc --setopt=clean_requirements_on_remove=1\n\n",
+                "# Add cfn-signal to path\n",
+                "hash cfn-signal 2> /dev/null || ",
+                "PATH=\"${PATH}:/usr/local/bin:/opt/aws/bin\"",
+                "\n\n",
+                "# Execute cfn-init\n",
+                "/opt/aws/bin/cfn-init -v -c ExistingConf",
+                " --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                " --resource osticketLaunchConfig",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                " ||",
+                " ( echo 'ERROR: cfn-init failed! Aborting!';",
+                " /opt/aws/bin/cfn-signal -e 1",
+                "  --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "  --resource osticketAutoScalingGroup",
+                "  --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ";",
+                " exit 1",
+                " )\n\n"
+              ]
+            ]
+          }
+        }
+      },
+      "Type": "AWS::AutoScaling::LaunchConfiguration"
+    }
+  }
+}
