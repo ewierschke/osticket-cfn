@@ -193,13 +193,21 @@
     "SNSSubscriptionEmail": {
       "AllowedPattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
       "Default": "deployer@example.com",
-      "Description": "Email address to which AWS SNS events are sent.",
+      "Description": "Email address to which AWS SNS events and SES IAM Account rotate confirmations are sent.",
       "MinLength": "3",
       "Type": "String"
     },
     "VPC": {
       "Description": "VPC ID",
       "Type": "AWS::EC2::VPC::Id"
+    },
+    "osticketSESIAMUserName": {
+      "Description": "IAM Username used for SES email sending (must be unique per deployment)",
+      "Type": "String"
+    },
+    "SESMailFromDomain": {
+      "Description": "SES Verified domain from which to send emails (ie example.com)",
+      "Type": "String"
     }
   },
   "Resources": {
@@ -328,6 +336,15 @@
           },
           "UsersOUDN": {
             "Ref": "UsersOUDN"
+          },
+          "osticketSESIAMUserName": {
+            "Ref": "osticketSESIAMUserName"
+          },
+          "SNSSubscriptionEmail": {
+            "Ref": "SNSSubscriptionEmail"
+          },
+          "SESMailFromDomain": {
+            "Ref": "SESMailFromDomain"
           }
         },
         "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template.json"

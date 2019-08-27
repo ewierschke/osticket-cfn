@@ -96,6 +96,21 @@
       "Type": "String",
       "Default": "DC=ad,DC=example,DC=com",
       "MinLength": "1"
+    },
+    "osticketSESIAMUserName": {
+      "Description": "IAM Username used for SES email sending (must be unique per deployment)",
+      "Type": "String"
+    },
+    "SESMailFromDomain": {
+      "Description": "SES Verified domain from which to send emails (ie example.com)",
+      "Type": "String"
+    },
+    "SNSSubscriptionEmail": {
+      "AllowedPattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
+      "Default": "deployer@example.com",
+      "Description": "Email address to which AWS SNS events and SES IAM Account rotate confirmations are sent.",
+      "MinLength": "3",
+      "Type": "String"
     }
   },
   "Resources": {
@@ -292,6 +307,48 @@
           "Version": "2012-10-17"
         },
         "PolicyName": "osticketSSMManagedInstanceCore",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketManageSESIAMAccessKey": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "iam:CreateAccessKey",
+                "iam:UpdateAccessKey",
+                "iam:DeleteAccessKey",
+                "iam:ListAccessKeys"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":user/",
+                      {
+                        "Ref": "osticketSESIAMUserName"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketManageSESIAMAccessKey",
         "Roles": [
           {
             "Ref": "osticketInstanceRole"
@@ -1050,21 +1107,6 @@
           },
           "h-mailsetup": {
             "commands": {
-              "10-mailsetup-getsaslpass": {
-                "command": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "aws s3 cp s3://",
-                      {
-                        "Ref": "osticketConfigBucketName"
-                      },
-                      "/sasl_passwd /etc/postfix/sasl_passwd",
-                      "\n"
-                    ]
-                  ]
-                }
-              },
               "20-mailsetup-getscript": {
                 "command": {
                   "Fn::Join": [
@@ -1102,12 +1144,34 @@
                   ]
                 }
               },
-              "50-mailsetup-postmap": {
+              "50-mailsetup-getrotatescript": {
                 "command": {
                   "Fn::Join": [
                     "",
                     [
-                      "/sbin/postmap /etc/postfix/sasl_passwd",
+                      "wget -O /usr/local/bin/rotatesescredsforiamuser.sh https://raw.githubusercontent.com/ewierschke/secrets_manager_ad_pass/master/rotatesescredsforiamuser.sh",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "51-mailsetup-runrotatescript": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "bash /usr/local/bin/rotatesescredsforiamuser.sh -A ",
+                      {
+                        "Ref": "SNSSubscriptionEmail"
+                      },
+                      " -D ",
+                      {
+                        "Ref": "SESMailFromDomain"
+                      },
+                      " -U ",
+                      {
+                        "Ref": "osticketSESIAMUserName"
+                      },
                       "\n"
                     ]
                   ]
