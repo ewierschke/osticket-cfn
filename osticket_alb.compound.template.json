@@ -208,6 +208,10 @@
     "SESMailFromDomain": {
       "Description": "SES Verified domain from which to send emails (ie example.com)",
       "Type": "String"
+    },
+    "osticketScapOutputBucketName": {
+      "Description": "Name of the S3 bucket where the scap scan output will be copied",
+      "Type": "String"
     }
   },
   "Resources": {
@@ -345,6 +349,9 @@
           },
           "SESMailFromDomain": {
             "Ref": "SESMailFromDomain"
+          },
+          "osticketScapOutputBucketName": {
+            "Ref": "osticketScapOutputBucketName"
           }
         },
         "TemplateURL": "https://s3.amazonaws.com/osticket-cfn/osticket_private_autoscale_alb.element.template.json"

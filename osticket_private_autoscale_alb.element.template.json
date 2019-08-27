@@ -111,6 +111,10 @@
       "Description": "Email address to which AWS SNS events and SES IAM Account rotate confirmations are sent.",
       "MinLength": "3",
       "Type": "String"
+    },
+    "osticketScapOutputBucketName": {
+      "Description": "Name of the S3 bucket where the scap scan output will be copied",
+      "Type": "String"
     }
   },
   "Resources": {
@@ -204,6 +208,42 @@
           "Version": "2012-10-17"
         },
         "PolicyName": "osticketConfigInstanceS3Access",
+        "Roles": [
+          {
+            "Ref": "osticketInstanceRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "osticketScapOutputS3Access": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:s3:::",
+                      {
+                        "Ref": "osticketScapOutputBucketName"
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "osticketScapOutputS3Access",
         "Roles": [
           {
             "Ref": "osticketInstanceRole"
@@ -572,6 +612,26 @@
                     ]
                   ]
                 }
+              },
+              "20-put-scap-output": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "ec2id=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id) && aws s3 cp /root/scap/output/ s3://",
+                      {
+                        "Ref": "osticketScapOutputBucketName"
+                      },
+                      "/$ec2id/ --recursive",
+                      "\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "packages": {
+              "yum": {
+                "wget": []
               }
             }
           },
@@ -1284,7 +1344,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "*/15 * * * * root /usr/bin/bash /usr/local/bin/userimport.sh",
+                      "*/15 * * * * root sleep $(expr $RANDOM % 10); /usr/bin/bash /usr/local/bin/userimport.sh",
                       "\n"
                     ]
                   ]
