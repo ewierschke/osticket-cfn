@@ -1344,7 +1344,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "*/15 * * * * root sleep $(expr $RANDOM % 10); /usr/bin/bash /usr/local/bin/userimport.sh",
+                      "*/15 * * * * root /usr/bin/bash /usr/local/bin/userimport.sh",
                       "\n"
                     ]
                   ]
@@ -1359,6 +1359,8 @@
                     "",
                     [
                       "#!/bin/bash -e",
+                      "\n",
+                      "/bin/sleep $[ ( $RANDOM % 10 ) + 1 ]s",
                       "\n",
                       "today=$(date +\"%Y_%m_%d\")",
                       "\n",
