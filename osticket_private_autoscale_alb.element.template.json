@@ -508,9 +508,6 @@
               "i-firewall_httpd",
               "j-ldapimport",
               "k-iamsshusers",
-              "l-cloudwatchagentsetup",
-              "m-inspectoragentsetup",
-              "n-ssmagentsetup",
               "o-finalize"
             ],
             "NewConf": [
