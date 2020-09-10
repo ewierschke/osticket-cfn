@@ -664,7 +664,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "yum install https://repo.ius.io/ius-release-el7.rpm https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm --nogpgcheck",
+                      "yum -y install https://repo.ius.io/ius-release-el7.rpm https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm --nogpgcheck",
                       "\n"
                     ]
                   ]
