@@ -668,12 +668,34 @@
                   ]
                 }
               },
-              "20-install-ius": {
+              "20-install-remi": {
                 "command": {
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y install https://repo.ius.io/ius-release-el7.rpm https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm --nogpgcheck",
+                      "yum -y install http://rpms.remirepo.net/enterprise/remi-release-7.rpm --nogpgcheck",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "21-enable-remi": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum-config-manager --enable remi-php72",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "22-install-php-dep": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y install libargon2",
                       "\n"
                     ]
                   ]
@@ -684,7 +706,29 @@
                   "Fn::Join": [
                     "",
                     [
-                      "yum -y install php72u php72u-cli php72u-ldap php72u-mysqli php72u-gd php72u-imap php72u-mbstring php72u-intl php72u-apcu php72u-opcache php72u-xml php72u-json",
+                      "yum -y install php72 php72-php php72-php-cli php72-php-ldap php72-php-mysqli php72-php-gd php72-php-imap php72-php-mbstring php72-php-intl php72-php-apcu php72-php-opcache php72-php-xml php72-php-json",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "31-enable-php-bash": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "scl enable php72 bash",
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "32-php-symlink": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "ln -s /usr/bin/php72 /usr/bin/php",
                       "\n"
                     ]
                   ]
@@ -803,7 +847,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "sed -i 's|;date.timezone =|date.timezone = America/New_York|' /etc/php.ini",
+                      "sed -i 's|;date.timezone =|date.timezone = America/New_York|' /etc/opt/remi/php72/php.ini",
                       "\n"
                     ]
                   ]
@@ -814,7 +858,7 @@
                   "Fn::Join": [
                     "",
                     [
-                      "sed -i 's|upload_max_filesize = 2M|upload_max_filesize = 10M|' /etc/php.ini",
+                      "sed -i 's|upload_max_filesize = 2M|upload_max_filesize = 10M|' /etc/opt/remi/php72/php.ini",
                       "\n"
                     ]
                   ]
