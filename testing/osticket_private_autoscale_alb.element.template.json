@@ -20,8 +20,9 @@
     "InstanceType": {
       "Description": "Amazon EC2 instance type for the osticket Instance",
       "Type": "String",
-      "Default": "t2.micro",
+      "Default": "t3.small",
       "AllowedValues": [
+        "t3.small",
         "t2.micro",
         "t2.small",
         "t2.medium",
@@ -423,7 +424,7 @@
           "Ref": "DesiredCapacity"
         },
         "HealthCheckGracePeriod": "3600",
-        "HealthCheckType": "ELB",
+        "HealthCheckType": "EC2",
         "LaunchConfigurationName": {
           "Ref": "osticketLaunchConfig"
         },
@@ -1362,12 +1363,16 @@
                   ]
                 }
               },
-              "20-wget_ldap-csvexport": {
+              "20-get_ldap-csvexport": {
                 "command": {
                   "Fn::Join": [
                     "",
                     [
-                      "wget -O /usr/local/bin/ldap-csvexport-1.9.tar.gz https://downloads.sourceforge.net/project/ldap-csvexport/ldap-csvexport-1.9.tar.gz",
+                      "aws s3 cp s3://",
+                      {
+                        "Ref": "osticketConfigBucketName"
+                      },
+                      "/ldap-csvexport-1.9.tar.gz /usr/local/bin/ldap-csvexport-1.9.tar.gz",
                       "\n"
                     ]
                   ]
@@ -1851,7 +1856,7 @@
                     ]
                   ]
                 },
-                "ignoreErrors": "true"
+                "ignoreErrors": "false"
               }
             }
           }

@@ -1,0 +1,157 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Conditions": {
+        "UseACM": {
+            "Fn::Equals": [
+                {
+                    "Ref": "SslCertificateService"
+                },
+                "ACM"
+            ]
+        }
+    },
+    "Description": "This template creates an internal Application Load Balancer and a healthcheck for osticket",
+    "Outputs": {
+        "LoadBalancerDns": {
+            "Description": "DNS name for the osticket ALB",
+            "Value": {
+                "Fn::GetAtt": [
+                    "ALB",
+                    "DNSName"
+                ]
+            }
+        },
+        "LoadBalancerName": {
+            "Description": "Name of the osticket Application Load Balancer",
+            "Value": {
+                "Ref": "ALB"
+            }
+        }
+    },
+    "Parameters": {
+        "PrivateSubnetIDs": {
+            "Description": "A list of Private subnet IDs to attach to the load balancer.",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "SecurityGroupId": {
+            "Description": "ID of the security group for ELB",
+            "Type": "AWS::EC2::SecurityGroup::Id"
+        },
+        "SslCertificateName": {
+            "Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ALB. The cert must already exist in the service.",
+            "Type": "String"
+        },
+        "SslCertificateService": {
+            "AllowedValues": [
+                "ACM",
+                "IAM"
+            ],
+            "Default": "ACM",
+            "Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
+            "Type": "String"
+        },
+        "TargetGroupId": {
+            "Description": "ARN of the target group for ALB",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "ALB": {
+            "Properties": {
+                "Scheme": "internal",
+                "SecurityGroups": [
+                    {
+                        "Ref": "SecurityGroupId"
+                    }
+                ],
+                "Subnets": {
+                    "Ref": "PrivateSubnetIDs"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "osticket-",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "ALBListeners": {
+            "Properties": {
+                "Certificates": [
+                    {
+                        "CertificateArn": {
+                            "Fn::If": [
+                                "UseACM",
+                                {
+                                    "Fn::Join": [
+                                        ":",
+                                        [
+                                            "arn:aws:acm",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            {
+                                                "Fn::Join": [
+                                                    "",
+                                                    [
+                                                        "certificate/",
+                                                        {
+                                                            "Ref": "SslCertificateName"
+                                                        }
+                                                    ]
+                                                ]
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:iam::",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":server-certificate/",
+                                            {
+                                                "Ref": "SslCertificateName"
+                                            }
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "TargetGroupId"
+                        }
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "ALB"
+                },
+                "Port": "443",
+                "Protocol": "HTTPS"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        }
+    }
+}
