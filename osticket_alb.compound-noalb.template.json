@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This template creates an instance of osticket for ticket management, fronted by an Application Load Balancer.",
+  "Description": "This template creates an instance of osticket for ticket management, with no an Application Load Balancer.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
